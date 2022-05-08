@@ -10,6 +10,7 @@ from robustbench.data import load_cifar10c
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
+import torchvision.transforms.functional as TF
 
 import tent
 import norm
