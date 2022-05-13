@@ -10,6 +10,7 @@ from robustbench.utils import clean_accuracy as accuracy
 
 import math
 import json
+from copy import deepcopy
 
 import tent
 import tent_ce
@@ -39,6 +40,7 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "tent_pl":
         logger.info("test-time adaptation: TENT_PL")
         model = setup_tent_ce(base_model)
+        source_model = deepcopy(model).model
     if cfg.MODEL.ADAPTATION == "cotta":
         logger.info("test-time adaptation: CoTTA")
         model = setup_cotta(base_model)
@@ -59,7 +61,7 @@ def evaluate(description):
                                            [corruption_type])
             x_test, y_test = x_test.cuda(), y_test.cuda()
             if cfg.MODEL.ADAPTATION == "tent_pl":
-                pseudos = pseudo_labels(model.model, x_test, cfg.TEST.BATCH_SIZE)
+                pseudos = pseudo_labels(source_model, x_test, cfg.TEST.BATCH_SIZE)
                 acc = accuracy_pl(model, x_test, y_test, pseudos, cfg.TEST.BATCH_SIZE)
             else:
                 acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE)
