@@ -64,7 +64,7 @@ def evaluate(description):
             err = 1. - acc
             logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
 
-def accuracy_ce(model, x, y, batch_size, device):
+def accuracy_ce(model, x, y, batch_size, device=None):
     if device is None:
         device = x.device
     acc = 0.
