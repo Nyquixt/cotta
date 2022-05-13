@@ -54,6 +54,7 @@ def forward_and_adapt(x, y, model, optimizer):
     """
     # forward
     outputs = model(x)
+    targets = y.type(torch.LongTensor)
     # adapt
     loss = F.cross_entropy(outputs, y).mean(0)
     loss.backward()
