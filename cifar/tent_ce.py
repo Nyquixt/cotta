@@ -39,13 +39,6 @@ class Tent(nn.Module):
         load_model_and_optimizer(self.model, self.optimizer,
                                  self.model_state, self.optimizer_state)
 
-
-# @torch.jit.script
-# def cross_entropy(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-#     """Entropy of softmax distribution from logits."""
-#     return -(y.softmax(1) * x.log_softmax(1)).sum(1)
-
-
 @torch.enable_grad()  # ensure grads in possible no grad context for testing
 def forward_and_adapt(x, y, model, optimizer):
     """Forward and adapt model on batch of data.

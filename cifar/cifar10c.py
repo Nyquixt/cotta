@@ -9,6 +9,8 @@ from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
 
 import math
+import json
+
 import tent
 import tent_ce
 import norm
@@ -21,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def evaluate(description):
+    acc_history = {}
     load_cfg_fom_args(description)
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
@@ -41,7 +44,6 @@ def evaluate(description):
         logger.info("test-time adaptation: CoTTA")
         model = setup_cotta(base_model)
     # evaluate on each severity and type of corruption in turn
-    prev_ct = "x0"
     for severity in cfg.CORRUPTION.SEVERITY:
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
             # continual adaptation for all corruption 
@@ -61,8 +63,45 @@ def evaluate(description):
                 acc = accuracy_ce(model, x_test, y_test, cfg.TEST.BATCH_SIZE)
             else:
                 acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE)
+
+            # forward and backward transfer for continual learning
+            if i_c > 0:
+                # save acc for current task T
+                acc_history[corruption_type] = {}
+                acc_history[corruption_type]['acc'] = acc
+                # and past tasks
+                for i, ct in enumerate(cfg.CORRUPTION.TYPE[:i_c]):
+                    x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
+                                           severity, cfg.DATA_DIR, False,
+                                           [ct])
+                    x_test, y_test = x_test.cuda(), y_test.cuda()
+                    if cfg.MODEL.ADAPTATION == "tent_ce":
+                        past_acc = accuracy_ce(model.model, x_test, y_test, cfg.TEST.BATCH_SIZE)
+                    else:
+                        past_acc = accuracy(model.model, x_test, y_test, cfg.TEST.BATCH_SIZE)
+                    acc_history[corruption_type][ct] = past_acc
             err = 1. - acc
             logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+    logger.info(json.dumps(acc_history, sort_keys=False, indent=4))
+
+# def softmax_entropy(x: torch.Tensor) -> torch.Tensor:
+#     """Entropy of softmax distribution from logits."""
+#     return -(x.softmax(1) * x.log_softmax(1)).sum(1)
+
+# def tent_adapt(model, optimizer, x, y, batch_size, device=None):
+#     if device is None:
+#         device = x.device
+#     n_batches = math.ceil(x.shape[0] / batch_size)
+
+#     for counter in range(n_batches):
+#         x_curr = x[counter * batch_size:(counter + 1) * batch_size].to(device)
+#         y_curr = y[counter * batch_size:(counter + 1) * batch_size].to(device)
+
+#         outputs = model(x_curr)
+#         loss = softmax_entropy(outputs).mean(0)
+#         loss.backward()
+#         optimizer.step()
+#         optimizer.zero_grad()
 
 def accuracy_ce(model, x, y, batch_size, device=None):
     if device is None:
@@ -71,10 +110,8 @@ def accuracy_ce(model, x, y, batch_size, device=None):
     n_batches = math.ceil(x.shape[0] / batch_size)
     with torch.no_grad():
         for counter in range(n_batches):
-            x_curr = x[counter * batch_size:(counter + 1) *
-                       batch_size].to(device)
-            y_curr = y[counter * batch_size:(counter + 1) *
-                       batch_size].to(device)
+            x_curr = x[counter * batch_size:(counter + 1) * batch_size].to(device)
+            y_curr = y[counter * batch_size:(counter + 1) * batch_size].to(device)
 
             output = model(x_curr, y_curr)
             acc += (output.max(1)[1] == y_curr).float().sum()
