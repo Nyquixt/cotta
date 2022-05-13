@@ -36,8 +36,8 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "tent":
         logger.info("test-time adaptation: TENT")
         model = setup_tent(base_model)
-    if cfg.MODEL.ADAPTATION == "tent_ce":
-        logger.info("test-time adaptation: TENT_CE")
+    if cfg.MODEL.ADAPTATION == "tent_pl":
+        logger.info("test-time adaptation: TENT_PL")
         model = setup_tent_ce(base_model)
     if cfg.MODEL.ADAPTATION == "cotta":
         logger.info("test-time adaptation: CoTTA")
