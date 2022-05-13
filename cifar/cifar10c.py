@@ -8,7 +8,9 @@ from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
 
+import math
 import tent
+import tent_ce
 import norm
 import cotta
 
@@ -32,6 +34,9 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "tent":
         logger.info("test-time adaptation: TENT")
         model = setup_tent(base_model)
+    if cfg.MODEL.ADAPTATION == "tent_ce":
+        logger.info("test-time adaptation: TENT_CE")
+        model = setup_tent_ce(base_model)
     if cfg.MODEL.ADAPTATION == "cotta":
         logger.info("test-time adaptation: CoTTA")
         model = setup_cotta(base_model)
@@ -52,10 +57,29 @@ def evaluate(description):
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
             x_test, y_test = x_test.cuda(), y_test.cuda()
-            acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE)
+            if cfg.MODEL.ADAPTATION == "tent_ce":
+                acc = accuracy_ce(model, x_test, y_test, cfg.TEST.BATCH_SIZE)
+            else:
+                acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE)
             err = 1. - acc
             logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
 
+def accuracy_ce(model, x, y, batch_size, device):
+    if device is None:
+        device = x.device
+    acc = 0.
+    n_batches = math.ceil(x.shape[0] / batch_size)
+    with torch.no_grad():
+        for counter in range(n_batches):
+            x_curr = x[counter * batch_size:(counter + 1) *
+                       batch_size].to(device)
+            y_curr = y[counter * batch_size:(counter + 1) *
+                       batch_size].to(device)
+
+            output = model(x_curr, y_curr)
+            acc += (output.max(1)[1] == y_curr).float().sum()
+
+    return acc.item() / x.shape[0]
 
 def setup_source(model):
     """Set up the baseline source model without adaptation."""
@@ -96,6 +120,23 @@ def setup_tent(model):
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return tent_model
 
+def setup_tent_ce(model):
+    """Set up tent with cross-entropy adaptation.
+
+    Configure the model for training + feature modulation by batch statistics,
+    collect the parameters for feature modulation by gradient optimization,
+    set up the optimizer, and then tent the model.
+    """
+    model = tent_ce.configure_model(model)
+    params, param_names = tent_ce.collect_params(model)
+    optimizer = setup_optimizer(params)
+    tent_model = tent_ce.Tent(model, optimizer,
+                           steps=cfg.OPTIM.STEPS,
+                           episodic=cfg.MODEL.EPISODIC)
+    logger.info(f"model for adaptation: %s", model)
+    logger.info(f"params for adaptation: %s", param_names)
+    logger.info(f"optimizer for adaptation: %s", optimizer)
+    return tent_model
 
 def setup_cotta(model):
     """Set up tent adaptation.
