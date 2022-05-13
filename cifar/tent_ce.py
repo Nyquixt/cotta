@@ -2,6 +2,7 @@ from copy import deepcopy
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.jit
 
 
@@ -39,10 +40,10 @@ class Tent(nn.Module):
                                  self.model_state, self.optimizer_state)
 
 
-@torch.jit.script
-def cross_entropy(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    """Entropy of softmax distribution from logits."""
-    return -(y.softmax(1) * x.log_softmax(1)).sum(1)
+# @torch.jit.script
+# def cross_entropy(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+#     """Entropy of softmax distribution from logits."""
+#     return -(y.softmax(1) * x.log_softmax(1)).sum(1)
 
 
 @torch.enable_grad()  # ensure grads in possible no grad context for testing
@@ -54,7 +55,7 @@ def forward_and_adapt(x, y, model, optimizer):
     # forward
     outputs = model(x)
     # adapt
-    loss = cross_entropy(outputs, y).mean(0)
+    loss = F.cross_entropy(outputs, y).mean(0)
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()
